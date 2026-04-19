@@ -232,7 +232,7 @@
     
     <div id="reload-msg">RELOADING...</div>
     
-    <div class="move-hint">WASD: 移動 | Mouse: 視点 | Click: 射撃 | R: リロード</div>
+    <div class="move-hint">WASD: 移動 | Space: ジャンプ | Mouse: 視点 | Click: 射撃 | R: リロード</div>
 
     <div id="overlay">
         <div id="overlay-content" class="flex flex-col items-center">
@@ -240,7 +240,7 @@
                 MONSTER<br>SHOOTING
             </h1>
             <div class="text-white mb-10 text-center text-xl space-y-4 max-w-2xl leading-relaxed">
-                <p>🌵 WASDで移動！左クリックで敵を打ち抜け！Rでリロードも忘れずに！</p>
+                <p>🌵 WASDで移動、Spaceでジャンプ！<br>左クリックで敵を打ち抜け！Rでリロード！</p>
                 <p>💥 ゾンビの頭を撃つとワンパン！胴体は何発当てても倒せないぞ！</p>
                 <p>🔥 鳥の弾を打ち返すと弾が<span class="text-yellow-400">全回復</span>し、<br>低確率で<span class="text-green-400">ライフも回復</span>する！</p>
             </div>
@@ -266,6 +266,13 @@
     let gameStartTime = 0;
     let difficultyScale = 1.0;
 
+    // Physics variables
+    let velocityY = 0;
+    const gravity = 0.015;
+    const jumpStrength = 0.35;
+    const playerHeight = 1.6;
+    let isGrounded = true;
+
     // Assets URLs
     const bgmUrl = "https://raw.githubusercontent.com/hw26a083/cowboy-shooting/main/maou_bgm_neorock72.mp3";
     const shootSEUrl = "https://raw.githubusercontent.com/hw26a083/cowboy-shooting/main/maou_se_battle_gun03.mp3";
@@ -275,7 +282,7 @@
     let zombieTexture;
     let bgm, shootSE, reloadSE;
 
-    const keys = { w: false, a: false, s: false, d: false };
+    const keys = { w: false, a: false, s: false, d: false, ' ': false };
     const moveSpeed = 0.15;
 
     function init() {
@@ -285,7 +292,7 @@
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.rotation.order = 'YXZ';
-        camera.position.set(0, 1.6, 0);
+        camera.position.set(0, playerHeight, 0);
         scene.add(camera);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -322,7 +329,10 @@
         window.addEventListener('mousedown', onMouseDown);
         window.addEventListener('contextmenu', (e) => { e.preventDefault(); reload(); }); 
         window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('keyup', (e) => updateKey(e.key.toLowerCase(), false));
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            updateKey(key, false);
+        });
         
         document.getElementById('start-btn').onclick = startGame;
         animate();
@@ -411,6 +421,11 @@
         const key = e.key.toLowerCase();
         updateKey(key, true);
         if (key === 'r' && gameActive) reload();
+        // Jump handling
+        if (key === ' ' && gameActive && isGrounded) {
+            velocityY = jumpStrength;
+            isGrounded = false;
+        }
     }
 
     function updateKey(key, state) { if (key in keys) keys[key] = state; }
@@ -534,15 +549,13 @@
             if (target) {
                 if (target.type === 'zombie') {
                     const relativeY = hitPoint.y - target.mesh.position.y;
-                    // 頭部判定の閾値を緩和 (1.8m -> 1.6m) 
+                    // 頭部判定
                     if (relativeY > 1.6) {
                         handleHit(target, true);
                     } else {
-                        // 胴体判定 - 無敵化（エフェクトのみ）
                         createHitEffect(hitPoint, 0xaaaaaa, 0.8);
                     }
                 } else {
-                    // 鳥モンスター
                     handleHit(target, true);
                 }
             } else if (isFireball) {
@@ -579,7 +592,6 @@
         combo++;
         score += basePts * multiplier * combo;
         
-        // 倒された時の派手なエフェクト
         createHitEffect(target.mesh.position.clone().add(new THREE.Vector3(0, target.type==='bird'?0:1, 0)), isHeadshot ? 0xff0000 : 0xcc0000, 3);
         
         scene.remove(target.mesh);
@@ -595,7 +607,6 @@
         mesh.position.set(camera.position.x + Math.sin(angle) * dist, isZombie ? 0 : 5 + Math.random() * 4, camera.position.z + Math.cos(angle) * dist);
         scene.add(mesh);
         
-        // ゾンビの体力設定
         targets.push({ mesh: mesh, type: isZombie ? 'zombie' : 'bird', health: 1, dying: false, lastAttack: Date.now() });
     }
 
@@ -627,7 +638,6 @@
         reloadAnimTime = 0;
         updateUI();
 
-        // リロード音の再生
         if(reloadSE) { 
             reloadSE.currentTime = 0; 
             reloadSE.play().catch(e => console.log("Reload sound error:", e)); 
@@ -640,14 +650,16 @@
         score = 0; health = 3; ammo = 6; combo = 0; gameStartTime = Date.now();
         targets.forEach(t => scene.remove(t.mesh)); targets = [];
         projectiles.forEach(p => scene.remove(p.mesh)); projectiles = [];
-        
+        camera.position.set(0, playerHeight, 0);
+        velocityY = 0; isGrounded = true;
+
         const content = document.getElementById('overlay-content');
         content.innerHTML = `
             <h1 class="text-7xl text-white mb-8 text-center font-bold tracking-tighter" style="text-shadow: 6px 6px 0 #e06000, -2px -2px 0 #000;">
                 MONSTER<br>SHOOTING
             </h1>
             <div class="text-white mb-10 text-center text-xl space-y-4 max-w-2xl leading-relaxed">
-                <p>🌵 WASDで移動！左クリックで敵を打ち抜け！Rでリロードも忘れずに！</p>
+                <p>🌵 WASDで移動、Spaceでジャンプ！<br>左クリックで敵を打ち抜け！Rでリロード！</p>
                 <p>💥 ゾンビの頭を撃つとワンパン！胴体は何発当てても倒せないぞ！</p>
                 <p>🔥 鳥の弾を打ち返すと弾が<span class="text-yellow-400">全回復</span>し、<br>低確率で<span class="text-green-400">ライフも回復</span>する！</p>
             </div>
@@ -703,6 +715,7 @@
             difficultyScale = 1.0 + (now - gameStartTime) / 60000;
             if (now - lastSpawnTime > 2000 / difficultyScale) { createTarget(); lastSpawnTime = now; }
 
+            // Movement & Jump Physics
             const moveVec = new THREE.Vector3();
             if(keys.w) moveVec.z -= 1; if(keys.s) moveVec.z += 1;
             if(keys.a) moveVec.x -= 1; if(keys.d) moveVec.x += 1;
@@ -715,7 +728,21 @@
                     const d = new THREE.Vector2(nextPos.x - obs.mesh.position.x, nextPos.z - obs.mesh.position.z).length();
                     if(d < obs.radius + 1.2) { canMove = false; break; }
                 }
-                if(canMove) { camera.position.x += moveVec.x; camera.position.z += moveVec.z; }
+                if(canMove) { 
+                    camera.position.x += moveVec.x; 
+                    camera.position.z += moveVec.z; 
+                }
+            }
+
+            // Gravity logic
+            if (!isGrounded) {
+                velocityY -= gravity;
+                camera.position.y += velocityY;
+                if (camera.position.y <= playerHeight) {
+                    camera.position.y = playerHeight;
+                    velocityY = 0;
+                    isGrounded = true;
+                }
             }
 
             recoilAmount *= 0.82;

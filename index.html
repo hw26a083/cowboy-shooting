@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MONSTERSHOOTING - 3D Wild West Hunter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'DotGothic16', sans-serif;
+            background-color: #87CEEB;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .hud-panel {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .score-display {
+            font-size: 32px;
+            color: #ffffff;
+            letter-spacing: 2px;
+        }
+
+        .health-display {
+            font-size: 24px;
+            display: flex;
+            gap: 4px;
+            margin-left: 2px;
+            filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.4));
+        }
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .crosshair::before, .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 0, 0, 0.9);
+        }
+
+        .crosshair::before { top: 50%; left: -8px; width: 40px; height: 1px; transform: translateY(-50%); }
+        .crosshair::after { left: 50%; top: -8px; width: 1px; height: 40px; transform: translateX(-50%); }
+
+        #ammo-container-center {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .ammo-label {
+            font-size: 14px;
+            letter-spacing: 4px;
+            color: #ffd700;
+            margin-bottom: 8px;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        .ammo-icons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .bullet-icon {
+            width: 12px;
+            height: 35px;
+            background: linear-gradient(to bottom, #ffeb3b 0%, #fbc02d 40%, #ffd700 100%);
+            border-radius: 2px 2px 5px 5px;
+            border: 1px solid #8b4513;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .bullet-icon.empty {
+            background: #222;
+            border-color: #444;
+            opacity: 0.2;
+            transform: translateY(10px);
+        }
+
+        #reload-msg {
+            position: absolute;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffcc00;
+            font-size: 28px;
+            font-weight: bold;
+            display: none;
+            text-shadow: 2px 2px 0 #000;
+            animation: blink 0.5s infinite alternate;
+        }
+
+        @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: all;
+            z-index: 100;
+        }
+
+        .btn-start {
+            background: #e06000;
+            color: white;
+            padding: 15px 50px;
+            font-size: 24px;
+            border: 4px solid #fff;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .btn-start:active { transform: scale(0.95); }
+
+        #flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        #damage-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: red;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 60;
+        }
+
+        #heal-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #00ff00;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 61;
+        }
+
+        .move-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 10px;
+        }
+
+        .result-score {
+            font-size: 4rem;
+            color: #ffd700;
+            text-shadow: 4px 4px 0 #000;
+            margin-bottom: 0.5rem;
+            animation: scorePop 0.5s ease-out;
+        }
+
+        .high-score-notif {
+            color: #ff3e3e;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            margin-bottom: 1rem;
+            animation: blink 0.3s infinite alternate;
+        }
+
+        @keyframes scorePop {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="flash"></div>
+<div id="damage-flash"></div>
+<div id="heal-flash"></div>
+
+<div id="ui-layer">
+    <div class="hud-panel">
+        <div class="score-display">SCORE: <span id="score-val">0</span></div>
+        <div class="health-display" id="health-bar"></div>
+        <div id="combo-text"></div>
+    </div>
+    
+    <div class="crosshair"></div>
+
+    <div id="ammo-container-center">
+        <div class="ammo-label">CYLINDER</div>
+        <div class="ammo-icons" id="ammo-icons-list"></div>
+    </div>
+    
+    <div id="reload-msg">RELOADING...</div>
+    
+    <div class="move-hint">WASD: 移動 | Mouse: 視点 | Click: 射撃 | R: リロード</div>
+
+    <div id="overlay">
+        <div id="overlay-content" class="flex flex-col items-center">
+            <h1 class="text-7xl text-white mb-8 text-center font-bold tracking-tighter" style="text-shadow: 6px 6px 0 #e06000, -2px -2px 0 #000;">
+                MONSTER<br>SHOOTING
+            </h1>
+            <div class="text-white mb-10 text-center text-xl space-y-4 max-w-2xl leading-relaxed">
+                <p>🌵 WASDで移動！左クリックで敵を打ち抜け！Rでリロードも忘れずに！</p>
+                <p>💥 ゾンビの頭を撃つとワンパン！胴体は何発当てても倒せないぞ！</p>
+                <p>🔥 鳥の弾を打ち返すと弾が<span class="text-yellow-400">全回復</span>し、<br>低確率で<span class="text-green-400">ライフも回復</span>する！</p>
+            </div>
+            <button id="start-btn" class="btn-start">ゲーム開始</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let scene, camera, renderer, raycaster;
+    let gunGroup, cylinder; 
+    let score = 0, health = 3, ammo = 6, gameActive = false;
+    let highScore = parseInt(localStorage.getItem('cowboy_high_score')) || 0;
+    let targets = [];
+    let projectiles = []; 
+    let obstacles = []; 
+    let hitParticles = [];
+    let isReloading = false;
+    let reloadAnimTime = 0;
+    let combo = 0;
+    let recoilAmount = 0; 
+    let lastSpawnTime = 0;
+    let gameStartTime = 0;
+    let difficultyScale = 1.0;
+
+    // Assets URLs
+    const bgmUrl = "https://raw.githubusercontent.com/hw26a083/cowboy-shooting/main/maou_bgm_neorock72.mp3";
+    const shootSEUrl = "https://raw.githubusercontent.com/hw26a083/cowboy-shooting/main/maou_se_battle_gun03.mp3";
+    const reloadSEUrl = "https://raw.githubusercontent.com/hw26a083/cowboy-shooting/main/%E9%8A%83%E3%81%AE%E3%83%AA%E3%83%AD%E3%83%BC%E3%83%88%E3%82%99.mp3";
+    const zombieImgUrl = "https://raw.githubusercontent.com/hw26a083/cowboy-shooting/main/fantasy_zombie_man.png";
+    
+    let zombieTexture;
+    let bgm, shootSE, reloadSE;
+
+    const keys = { w: false, a: false, s: false, d: false };
+    const moveSpeed = 0.15;
+
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); 
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 120);
+
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.rotation.order = 'YXZ';
+        camera.position.set(0, 1.6, 0);
+        scene.add(camera);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        raycaster = new THREE.Raycaster();
+
+        const loader = new THREE.TextureLoader();
+        zombieTexture = loader.load(zombieImgUrl);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfff5e1, 1.0);
+        sunLight.position.set(50, 100, 50);
+        sunLight.castShadow = true;
+        scene.add(sunLight);
+
+        const groundGeo = new THREE.PlaneGeometry(1000, 1000);
+        const groundMat = new THREE.MeshPhongMaterial({ color: 0xd2b48c }); 
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        createPlayerGun();
+        generateEnvironment();
+        setupAudio();
+
+        window.addEventListener('resize', onWindowResize);
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('contextmenu', (e) => { e.preventDefault(); reload(); }); 
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', (e) => updateKey(e.key.toLowerCase(), false));
+        
+        document.getElementById('start-btn').onclick = startGame;
+        animate();
+    }
+
+    function setupAudio() {
+        bgm = new Audio(bgmUrl);
+        bgm.loop = true;
+        bgm.volume = 0.3;
+        
+        shootSE = new Audio(shootSEUrl);
+        shootSE.volume = 0.4;
+
+        reloadSE = new Audio(reloadSEUrl);
+        reloadSE.volume = 0.5;
+    }
+
+    function createPlayerGun() {
+        gunGroup = new THREE.Group();
+        const ironMat = new THREE.MeshPhongMaterial({ color: 0x333333, shininess: 100 });
+        
+        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.6), ironMat);
+        barrel.position.set(0, 0, -0.3);
+        gunGroup.add(barrel);
+        
+        cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.18, 12), ironMat);
+        cylinder.rotation.x = Math.PI / 2;
+        cylinder.position.set(0, -0.01, -0.02);
+        gunGroup.add(cylinder);
+        
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.25, 0.1), new THREE.MeshPhongMaterial({ color: 0x4d2600 }));
+        grip.rotation.x = -Math.PI / 8;
+        grip.position.set(0, -0.15, 0.05);
+        gunGroup.add(grip);
+        
+        gunGroup.position.set(0.35, -0.3, -0.5);
+        camera.add(gunGroup); 
+    }
+
+    function createCactus(x, z) {
+        const group = new THREE.Group();
+        const greenMat = new THREE.MeshPhongMaterial({ color: 0x2d5a27 });
+        
+        const height = 1.5 + Math.random() * 1.5;
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, height, 8), greenMat);
+        body.position.y = height / 2;
+        group.add(body);
+        
+        if (Math.random() > 0.3) {
+            const armSide = Math.random() > 0.5 ? 1 : -1;
+            const armH = 0.4;
+            const armV = 0.6;
+            const armJoint = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, armH, 8), greenMat);
+            armJoint.rotation.z = Math.PI / 2;
+            armJoint.position.set(0.25 * armSide, height * 0.6, 0);
+            group.add(armJoint);
+            
+            const armUp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, armV, 8), greenMat);
+            armUp.position.set(0.45 * armSide, height * 0.6 + armV/2, 0);
+            group.add(armUp);
+        }
+
+        group.position.set(x, 0, z);
+        scene.add(group);
+        obstacles.push({ mesh: group, radius: 1.0 });
+    }
+
+    function generateEnvironment() {
+        for(let i=0; i<30; i++) {
+            const x = (Math.random() - 0.5) * 200, z = (Math.random() - 0.5) * 200;
+            if (Math.abs(x) < 15 && Math.abs(z) < 15) continue;
+            const h = 2 + Math.random() * 5, r = 2 + Math.random() * 3;
+            const rock = new THREE.Mesh(new THREE.CylinderGeometry(r*0.7, r, h, 5), new THREE.MeshPhongMaterial({ color: 0x8b7355 }));
+            rock.position.set(x, h/2 - 0.2, z);
+            scene.add(rock);
+            obstacles.push({ mesh: rock, radius: r });
+        }
+        for(let i=0; i<25; i++) {
+            const x = (Math.random() - 0.5) * 180, z = (Math.random() - 0.5) * 180;
+            if (Math.abs(x) < 10 && Math.abs(z) < 10) continue;
+            createCactus(x, z);
+        }
+    }
+
+    function onKeyDown(e) {
+        const key = e.key.toLowerCase();
+        updateKey(key, true);
+        if (key === 'r' && gameActive) reload();
+    }
+
+    function updateKey(key, state) { if (key in keys) keys[key] = state; }
+
+    function createZombieMesh() {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshBasicMaterial({ map: zombieTexture, transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.2), mat);
+        mesh.position.y = 1.1;
+        mesh.userData.isHitbox = true;
+        group.add(mesh);
+        return group;
+    }
+
+    function createBirdMonster() {
+        const group = new THREE.Group();
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0x330000 });
+        const wingMat = new THREE.MeshPhongMaterial({ color: 0x110000 });
+        
+        const body = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.2, 4), bodyMat);
+        body.rotation.x = Math.PI / 2;
+        group.add(body);
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 4, 4), bodyMat);
+        head.position.set(0, 0, -0.6);
+        group.add(head);
+
+        const beak = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.3, 4), new THREE.MeshPhongMaterial({ color: 0xffcc00 }));
+        beak.rotation.x = -Math.PI / 2;
+        beak.position.set(0, 0, -0.85);
+        group.add(beak);
+
+        const leftWing = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.4), wingMat);
+        leftWing.position.set(-0.6, 0.1, 0);
+        leftWing.name = "leftWing";
+        group.add(leftWing);
+
+        const rightWing = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 0.4), wingMat);
+        rightWing.position.set(0.6, 0.1, 0);
+        rightWing.name = "rightWing";
+        group.add(rightWing);
+
+        const hitboxGeo = new THREE.SphereGeometry(0.85, 8, 8);
+        const hitboxMat = new THREE.MeshBasicMaterial({ visible: false }); 
+        const hitbox = new THREE.Mesh(hitboxGeo, hitboxMat);
+        hitbox.name = "birdHitbox";
+        group.add(hitbox);
+
+        return group;
+    }
+
+    function createHitEffect(position, color, scale = 1) {
+        const count = 10 * scale;
+        const mat = new THREE.MeshBasicMaterial({ color: color });
+        for(let i=0; i<count; i++) {
+            const size = 0.04 * scale + Math.random() * 0.08;
+            const p = new THREE.Mesh(new THREE.SphereGeometry(size, 4, 4), mat);
+            p.position.copy(position);
+            scene.add(p);
+            hitParticles.push({
+                mesh: p,
+                velocity: new THREE.Vector3((Math.random()-0.5)*0.25, Math.random()*0.35, (Math.random()-0.5)*0.25),
+                life: 1.0,
+                decay: 0.04 / scale
+            });
+        }
+    }
+
+    function createFireball(startPos) {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff3300 }));
+        mesh.position.copy(startPos);
+        mesh.userData.isFireball = true; 
+        scene.add(mesh);
+        const dir = new THREE.Vector3().subVectors(camera.position, startPos).normalize();
+        projectiles.push({ mesh: mesh, velocity: dir.multiplyScalar(0.18 * difficultyScale) });
+    }
+
+    function onMouseMove(event) {
+        if(!gameActive) return;
+        camera.rotation.y -= event.movementX * 0.002;
+        camera.rotation.x -= event.movementY * 0.002; 
+        camera.rotation.x = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, camera.rotation.x));
+    }
+
+    function onMouseDown(event) {
+        if(!gameActive) return;
+        if(event.button === 2) return; 
+        
+        if(ammo <= 0 && !isReloading) {
+            reload();
+            return;
+        }
+
+        if(isReloading || ammo <= 0) return;
+        
+        ammo--;
+        updateUI();
+        triggerFlash("flash", 0.3);
+        if(shootSE) { shootSE.currentTime = 0; shootSE.play().catch(() => {}); }
+        recoilAmount = 0.6;
+        
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+        
+        const hittables = [];
+        targets.forEach(t => {
+            if (!t.dying) {
+                t.mesh.traverse(child => { if(child.isMesh) { child.userData.parentTarget = t; hittables.push(child); } });
+            }
+        });
+        projectiles.forEach(p => hittables.push(p.mesh));
+        obstacles.forEach(o => o.mesh.traverse(child => { if(child.isMesh) hittables.push(child); }));
+
+        const intersects = raycaster.intersectObjects(hittables);
+        
+        if (intersects.length > 0) {
+            const hit = intersects[0];
+            const hitPoint = hit.point;
+            const target = hit.object.userData.parentTarget;
+            const isFireball = hit.object.userData.isFireball;
+
+            if (target) {
+                if (target.type === 'zombie') {
+                    const relativeY = hitPoint.y - target.mesh.position.y;
+                    // 頭部判定の閾値を緩和 (1.8m -> 1.6m) 
+                    if (relativeY > 1.6) {
+                        handleHit(target, true);
+                    } else {
+                        // 胴体判定 - 無敵化（エフェクトのみ）
+                        createHitEffect(hitPoint, 0xaaaaaa, 0.8);
+                    }
+                } else {
+                    // 鳥モンスター
+                    handleHit(target, true);
+                }
+            } else if (isFireball) {
+                createHitEffect(hitPoint, 0x00ffff, 2.0); 
+                const proj = projectiles.find(p => p.mesh === hit.object);
+                if (proj) {
+                    scene.remove(proj.mesh);
+                    projectiles = projectiles.filter(p => p !== proj);
+                }
+                
+                ammo = 6;
+                score += 500;
+                combo++;
+
+                if (Math.random() < 0.2) {
+                    if (health < 3) {
+                        health++;
+                        triggerFlash("heal-flash", 0.4);
+                        createHitEffect(hitPoint, 0x00ff00, 3.0); 
+                    }
+                }
+                updateUI();
+            } else {
+                createHitEffect(hitPoint, 0xd2b48c, 0.6); 
+            }
+        }
+    }
+
+    function handleHit(target, isHeadshot) {
+        if(target.dying) return;
+        target.dying = true;
+        const basePts = target.type === 'zombie' ? 1000 : 800;
+        const multiplier = isHeadshot ? 2 : 1;
+        combo++;
+        score += basePts * multiplier * combo;
+        
+        // 倒された時の派手なエフェクト
+        createHitEffect(target.mesh.position.clone().add(new THREE.Vector3(0, target.type==='bird'?0:1, 0)), isHeadshot ? 0xff0000 : 0xcc0000, 3);
+        
+        scene.remove(target.mesh);
+        targets = targets.filter(t => t !== target);
+        updateUI();
+    }
+
+    function createTarget() {
+        const isZombie = Math.random() < 0.7;
+        const mesh = isZombie ? createZombieMesh() : createBirdMonster();
+        const angle = camera.rotation.y + Math.PI + (Math.random()-0.5) * Math.PI;
+        const dist = 35 + Math.random() * 15;
+        mesh.position.set(camera.position.x + Math.sin(angle) * dist, isZombie ? 0 : 5 + Math.random() * 4, camera.position.z + Math.cos(angle) * dist);
+        scene.add(mesh);
+        
+        // ゾンビの体力設定
+        targets.push({ mesh: mesh, type: isZombie ? 'zombie' : 'bird', health: 1, dying: false, lastAttack: Date.now() });
+    }
+
+    function takeDamage() {
+        health--; combo = 0;
+        triggerFlash("damage-flash", 0.5);
+        updateUI();
+        if(health <= 0) gameOver();
+    }
+
+    function updateUI() {
+        document.getElementById('score-val').innerText = score;
+        document.getElementById('health-bar').innerHTML = '❤️'.repeat(Math.max(0, health));
+        const list = document.getElementById('ammo-icons-list');
+        list.innerHTML = '';
+        for(let i=0; i<6; i++) {
+            const b = document.createElement('div');
+            b.className = 'bullet-icon' + (i >= ammo ? ' empty' : '');
+            list.appendChild(b);
+        }
+        document.getElementById('reload-msg').style.display = (isReloading) ? 'block' : 'none';
+        const c = document.getElementById('combo-text');
+        c.innerText = combo > 1 ? combo + " COMBO!" : "";
+    }
+
+    function reload() {
+        if(!gameActive || isReloading || ammo === 6) return;
+        isReloading = true;
+        reloadAnimTime = 0;
+        updateUI();
+
+        // リロード音の再生
+        if(reloadSE) { 
+            reloadSE.currentTime = 0; 
+            reloadSE.play().catch(e => console.log("Reload sound error:", e)); 
+        }
+
+        setTimeout(() => { ammo = 6; isReloading = false; updateUI(); }, 1000);
+    }
+
+    function startGame() {
+        score = 0; health = 3; ammo = 6; combo = 0; gameStartTime = Date.now();
+        targets.forEach(t => scene.remove(t.mesh)); targets = [];
+        projectiles.forEach(p => scene.remove(p.mesh)); projectiles = [];
+        
+        const content = document.getElementById('overlay-content');
+        content.innerHTML = `
+            <h1 class="text-7xl text-white mb-8 text-center font-bold tracking-tighter" style="text-shadow: 6px 6px 0 #e06000, -2px -2px 0 #000;">
+                MONSTER<br>SHOOTING
+            </h1>
+            <div class="text-white mb-10 text-center text-xl space-y-4 max-w-2xl leading-relaxed">
+                <p>🌵 WASDで移動！左クリックで敵を打ち抜け！Rでリロードも忘れずに！</p>
+                <p>💥 ゾンビの頭を撃つとワンパン！胴体は何発当てても倒せないぞ！</p>
+                <p>🔥 鳥の弾を打ち返すと弾が<span class="text-yellow-400">全回復</span>し、<br>低確率で<span class="text-green-400">ライフも回復</span>する！</p>
+            </div>
+            <button id="start-btn" class="btn-start">ゲーム開始</button>
+        `;
+        document.getElementById('start-btn').onclick = startGame;
+        
+        gameActive = true;
+        document.getElementById('overlay').style.display = 'none';
+        document.body.requestPointerLock();
+        if(bgm) { bgm.currentTime = 0; bgm.play().catch(() => {}); }
+        updateUI();
+    }
+
+    function gameOver() {
+        gameActive = false; 
+        if(document.pointerLockElement) document.exitPointerLock();
+        
+        let isNewRecord = false;
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('cowboy_high_score', highScore);
+            isNewRecord = true;
+        }
+
+        const overlay = document.getElementById('overlay');
+        const content = document.getElementById('overlay-content');
+        
+        content.innerHTML = `
+            <h1 class="text-6xl text-red-600 mb-2 text-center font-bold" style="text-shadow: 3px 3px 0 #000;">GAME OVER</h1>
+            ${isNewRecord ? '<div class="high-score-notif">NEW HIGH SCORE! (ハイスコア更新！)</div>' : ''}
+            <p class="text-white text-xl mb-2">最終スコア</p>
+            <div class="result-score">${score.toLocaleString()}</div>
+            <div class="text-yellow-500 text-lg mb-8">HIGH SCORE: ${highScore.toLocaleString()}</div>
+            <button id="restart-btn" class="btn-start">もう一度プレイ</button>
+        `;
+        
+        overlay.style.display = 'flex';
+        document.getElementById('restart-btn').onclick = startGame;
+        
+        if(bgm) bgm.pause();
+    }
+
+    function triggerFlash(id, intensity) {
+        const f = document.getElementById(id); f.style.transition = 'none'; f.style.opacity = intensity;
+        f.offsetHeight; f.style.transition = 'opacity 0.2s'; f.style.opacity = '0';
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const now = Date.now();
+        if(gameActive) {
+            difficultyScale = 1.0 + (now - gameStartTime) / 60000;
+            if (now - lastSpawnTime > 2000 / difficultyScale) { createTarget(); lastSpawnTime = now; }
+
+            const moveVec = new THREE.Vector3();
+            if(keys.w) moveVec.z -= 1; if(keys.s) moveVec.z += 1;
+            if(keys.a) moveVec.x -= 1; if(keys.d) moveVec.x += 1;
+            
+            if(moveVec.length() > 0) {
+                moveVec.normalize().multiplyScalar(moveSpeed).applyEuler(new THREE.Euler(0, camera.rotation.y, 0));
+                let canMove = true;
+                const nextPos = camera.position.clone().add(moveVec);
+                for(let obs of obstacles) {
+                    const d = new THREE.Vector2(nextPos.x - obs.mesh.position.x, nextPos.z - obs.mesh.position.z).length();
+                    if(d < obs.radius + 1.2) { canMove = false; break; }
+                }
+                if(canMove) { camera.position.x += moveVec.x; camera.position.z += moveVec.z; }
+            }
+
+            recoilAmount *= 0.82;
+            let targetY = -0.3;
+            let targetRotX = recoilAmount * 1.5;
+
+            if (isReloading) {
+                reloadAnimTime += 0.05;
+                targetY = -0.6; 
+                targetRotX = 0.5; 
+                cylinder.rotation.y += 0.3; 
+                gunGroup.rotation.z = Math.sin(reloadAnimTime * 5) * 0.2; 
+            } else {
+                gunGroup.rotation.z = 0;
+            }
+
+            gunGroup.position.y = targetY + (recoilAmount * 0.25) + Math.sin(now * 0.003) * 0.005;
+            gunGroup.rotation.x = targetRotX;
+
+            for(let i = targets.length - 1; i >= 0; i--) {
+                const t = targets[i];
+                const dist = t.mesh.position.distanceTo(camera.position);
+                if(t.type === 'zombie') {
+                    const dir = new THREE.Vector3().subVectors(camera.position, t.mesh.position);
+                    dir.y = 0; dir.normalize();
+                    t.mesh.position.add(dir.multiplyScalar(0.06 * difficultyScale));
+                    t.mesh.lookAt(camera.position.x, 0, camera.position.z);
+                    if(dist < 2.0) { takeDamage(); removeTarget(t); }
+                } else {
+                    t.mesh.position.y += Math.sin(now * 0.003) * 0.01;
+                    const lw = t.mesh.getObjectByName("leftWing"), rw = t.mesh.getObjectByName("rightWing");
+                    if(lw) lw.rotation.z = Math.sin(now * 0.01) * 1.0;
+                    if(rw) rw.rotation.z = -Math.sin(now * 0.01) * 1.0;
+                    t.mesh.lookAt(camera.position);
+                    if(now - t.lastAttack > 3500 / difficultyScale) { createFireball(t.mesh.position.clone()); t.lastAttack = now; }
+                    if(dist < 2.0) { takeDamage(); removeTarget(t); }
+                }
+            }
+
+            for(let i=projectiles.length-1; i>=0; i--) {
+                const p = projectiles[i];
+                p.mesh.position.add(p.velocity);
+                if(p.mesh.position.distanceTo(camera.position) < 1.2) { takeDamage(); scene.remove(p.mesh); projectiles.splice(i,1); }
+                else if(p.mesh.position.length() > 200) { scene.remove(p.mesh); projectiles.splice(i,1); }
+            }
+
+            for(let i=hitParticles.length-1; i>=0; i--) {
+                const h = hitParticles[i]; h.mesh.position.add(h.velocity); h.life -= h.decay;
+                h.mesh.scale.setScalar(Math.max(0.001, h.life));
+                if(h.life <= 0) { scene.remove(h.mesh); hitParticles.splice(i,1); }
+            }
+        }
+        renderer.render(scene, camera);
+    }
+
+    function removeTarget(t) { scene.remove(t.mesh); targets = targets.filter(x => x !== t); }
+    function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+    window.onload = init;
+</script>
+</body>
+</html>
